@@ -145,3 +145,11 @@ def test_unreadable_quota_waits_only_a_minute(monkeypatch):
     s = FakeSession([FakeResponse(400, "?"), FakeResponse(200, "latitude\n")], quota=[None])
     assert fb.get("https://x/KEY/area", "x", s, "KEY").startswith("latitude")
     assert sum(slept) == 60
+
+
+def test_403_exceeding_the_transaction_limit_is_a_quota_wait_not_a_bad_key(monkeypatch):
+    slept = no_sleep(monkeypatch)
+    s = FakeSession([FakeResponse(403, "Exceeding allowed transaction limit."), FakeResponse(200, "latitude\n1")],
+                    quota=[(4999, 5000), (4999, 5000), (50, 5000)])
+    assert fb.get("https://x/KEY/area", "data_availability", s, "KEY") == "latitude\n1"
+    assert sum(slept) >= 60

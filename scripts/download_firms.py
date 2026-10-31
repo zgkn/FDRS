@@ -90,8 +90,9 @@ def wait_for_quota(key, session, what, reason):
 def get(url, what, session, key):
     """GET with retries. The URL holds the key, so messages name `what` and the status only; the key is never printed.
 
-    HTTP 400/429 are what FIRMS answers when the quota of the key is used up (several jobs share it), so those wait for the
-    quota window to clear before trying again; any other failure backs off briefly.
+    FIRMS answers with HTTP 403 "Exceeding allowed transaction limit." (earlier runs saw 400) when the quota of the key is
+    used up (all jobs share it), so a quota message, or 400/429, waits for the window to clear before trying again; a 401/403
+    without that message is a bad key and stops; any other failure backs off briefly.
     """
     last = None
     for attempt in range(RETRIES):
@@ -106,9 +107,11 @@ def get(url, what, session, key):
         last = f"HTTP {r.status_code}"
         body = r.text[:160].replace(key, "***").replace("\n", " ")
         print(f"  [!] {what}: {last} {body!r}", flush=True)
-        if r.status_code in (401, 403):
+        # FIRMS says "Exceeding allowed transaction limit." with HTTP 403 (and earlier runs saw 400): go by the message
+        quota_hit = any(w in body.lower() for w in ("transaction", "limit", "exceed"))
+        if r.status_code in (401, 403) and not quota_hit:
             raise SystemExit(f"[X] FIRMS refused the request for {what} ({last}): check FIRMS_MAP_KEY")
-        if r.status_code in (400, 429):
+        if quota_hit or r.status_code in (400, 429):
             wait_for_quota(key, session, what, last)
         else:
             time.sleep(min(60, 5 * 2 ** attempt))

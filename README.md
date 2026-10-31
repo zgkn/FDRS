@@ -45,6 +45,13 @@ Locally: `pip install -r requirements.txt`, `python -m pytest tests`, and
   model at DC well above 400.
 * **Predictors**: the indices plus a per-region intercept to start; no static covariates yet.
 
+## FIRMS quota
+
+The key allows about 5,000 transactions per 10 minutes, shared by every job that uses it, and one year of hotspots uses a large
+share of that. When it is used up FIRMS answers HTTP 403 "Exceeding allowed transaction limit." (earlier runs also saw 400). The
+download reads the key's quota state, paces itself, and waits for the window to clear, so a full set of years takes a few
+windows, not minutes. Hotspot jobs run two at a time for this reason. A run that starts right after another one may wait first.
+
 ## Caveats
 
 * ERA5 rain drizzles too often in the tropics and its 10 m wind is a 28 km average, so the paper's thresholds (FFMC 78/83,
