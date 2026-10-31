@@ -7,7 +7,8 @@ Indonesian and Malaysian Fire Danger Rating Systems (de Groot et al. 2006, 2005)
 2. count the daily VIIRS active fires (FIRMS: S-NPP, NOAA-20, NOAA-21) per 0.25 degree cell;
 3. fit a logistic regression of "a fire was detected in the cell that day" on the indices; its probability is the risk.
 
-Steps 1 and 2 are built; step 3 (the regression) is next.
+All three steps are built. `join_training.py` and `fit_logistic.py` run through the *FDRS fit* workflow on the artifacts of a
+data run; they were tested on synthetic hotspots only, so treat the first real fit as a check of the pipeline as well.
 
 ## Pieces
 
@@ -17,6 +18,9 @@ Steps 1 and 2 are built; step 3 (the regression) is next.
 | `scripts/era5_fwi.py` | hourly ARCO-ERA5 -> noon T, RH, wind and 24 h rain -> daily FFMC, DMC, DC, ISI, BUI per cell. Solar-noon hour per column; 184-day spin-up. |
 | `scripts/download_firms.py` | FIRMS area API -> daytime, nominal/high-confidence vegetation-fire pixels -> de-duplicated across the three sensors (500 m, NOAA-21 > NOAA-20 > S-NPP) -> counts per cell-day, and a per-day table of which sensors were active. |
 | `scripts/grid.py` | the box and the ERA5 0.25 degree grid both are put on |
+| `scripts/join_training.py` | hotspot counts + FWI indices -> one row per land cell and day; islands from the land mask give the regions |
+| `scripts/fit_logistic.py` | logistic regressions (island intercept only, then + fine-fuel moisture and wind, + DC, + DMC); leave-one-year-out and hold-out AUC, Brier, calibration; date-clustered standard errors |
+| `.github/workflows/fit.yml` | *FDRS fit*: give it the run id of a full data run |
 | `tests/` | the 49-day test of the report's Table 7 reproduced to 0.1; vectorised = scalar; FIRMS filtering, de-duplication, aggregation |
 | `.github/workflows/pipeline.yml` | tests, then one hotspot job and one FWI job per year |
 

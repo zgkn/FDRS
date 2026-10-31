@@ -7,4 +7,8 @@ fsspec
 aiohttp
 requests
 netcdf4
+pyarrow
+statsmodels
+scikit-learn
+tabulate
 pytest

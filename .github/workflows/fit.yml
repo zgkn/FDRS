@@ -1,0 +1,64 @@
+name: FDRS fit
+
+# Joins the hotspot counts and FWI indices of one "FDRS data pipeline" run and fits the logistic regressions.
+# Needs the run id of a full (not smoke) data run whose artifacts (kept 30 days) are still there.
+# Run by hand: Actions > FDRS fit > Run workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Run id of the FDRS data pipeline run (the number in its URL)"
+        required: true
+      train_years:
+        description: "Training years, comma separated"
+        required: false
+        default: "2019,2020,2021,2022,2023"
+      holdout_years:
+        description: "Hold-out years, comma separated"
+        required: false
+        default: "2015"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  fit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: hotspots-*
+          path: data/hotspots
+          run-id: ${{ github.event.inputs.run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: fwi-*
+          path: data/fwi
+          run-id: ${{ github.event.inputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Join into one training table
+        run: python scripts/join_training.py --hotspots-dir data/hotspots --fwi-dir data/fwi --out out/training.parquet
+      - name: Fit the logistic regressions
+        env:
+          TRAIN: ${{ github.event.inputs.train_years }}
+          HOLDOUT: ${{ github.event.inputs.holdout_years }}
+        run: python scripts/fit_logistic.py --table out/training.parquet --train-years "$TRAIN" --holdout-years "$HOLDOUT" --outdir out/fit
+      - name: Show the report
+        run: cat out/fit/report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fit-report
+          path: |
+            out/fit/
+            out/training.parquet
+          retention-days: 30
