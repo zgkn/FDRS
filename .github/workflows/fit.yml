@@ -20,7 +20,7 @@ on:
         required: false
         default: "2019,2020,2021,2022,2023"
       holdout_years:
-        description: "Years only scored with the fit on the training years (blank for none)"
+        description: "Years only scored with the fit on the training years (type none for no hold-out: a blank value is replaced by the default 2015)"
         required: false
         default: "2015"
 
@@ -59,7 +59,9 @@ jobs:
         env:
           TRAIN: ${{ github.event.inputs.train_years }}
           HOLDOUT: ${{ github.event.inputs.holdout_years }}
-        run: python scripts/fit_logistic.py --table out/training.parquet --train-years "$TRAIN" --holdout-years "$HOLDOUT" --outdir out/fit
+        run: |
+          [ "$HOLDOUT" = "none" ] && HOLDOUT=""
+          python scripts/fit_logistic.py --table out/training.parquet --train-years "$TRAIN" --holdout-years "$HOLDOUT" --outdir out/fit
       - name: Show the report
         run: |
           cat out/fit/report.md >> "$GITHUB_STEP_SUMMARY"
