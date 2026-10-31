@@ -2,7 +2,7 @@ name: FDRS data pipeline
 
 # Hotspot cell counts (FIRMS VIIRS) and FWI-System indices (ARCO-ERA5) for the southern ASEAN box, one job per year.
 # Run by hand: Actions > FDRS data pipeline > Run workflow. "smoke" runs one 10-day window (2019-09-01..10) to prove the
-# FIRMS key and the ERA5 read work before a full run.
+# FIRMS key and the ERA5 read work before a full run. Needs the repository secret FIRMS_MAP_KEY.
 
 on:
   workflow_dispatch:
