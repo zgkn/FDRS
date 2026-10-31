@@ -11,6 +11,10 @@ on:
       hotspots_run_id:
         description: "Run id of the FDRS data pipeline run that made the hotspot artifacts (the number in its URL)"
         required: true
+      extra_hotspots_run_id:
+        description: "Optional second run id with more hotspot artifacts (years that had to be re-run)"
+        required: false
+        default: ""
       fwi_run_id:
         description: "Run id of the run that made the FWI artifacts (blank = the same run)"
         required: false
@@ -44,6 +48,13 @@ jobs:
           pattern: hotspots-*
           path: data/hotspots
           run-id: ${{ github.event.inputs.hotspots_run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        if: ${{ github.event.inputs.extra_hotspots_run_id != '' }}
+        with:
+          pattern: hotspots-*
+          path: data/hotspots
+          run-id: ${{ github.event.inputs.extra_hotspots_run_id }}
           github-token: ${{ github.token }}
       - uses: actions/download-artifact@v4
         with:
