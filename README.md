@@ -20,7 +20,7 @@ data run; they were tested on synthetic hotspots only, so treat the first real f
 | `scripts/grid.py` | the box and the ERA5 0.25 degree grid both are put on |
 | `scripts/join_training.py` | hotspot counts + FWI indices -> one row per land cell and day; islands from the land mask give the regions |
 | `scripts/fit_logistic.py` | logistic regressions (island intercept only, then + fine-fuel moisture and wind, + DC, + DMC) with a small Newton solver (checked against statsmodels; statsmodels itself ran the runner out of memory on 4.5 million rows); leave-one-year-out and hold-out AUC, Brier, calibration; date-clustered standard errors |
-| `.github/workflows/fit.yml` | *FDRS fit*: give it the run id of a full data run |
+| `.github/workflows/fit.yml` | *FDRS fit*: give it the run ids (comma separated) of the full data runs; years may come from several runs |
 | `tests/` | the 49-day test of the report's Table 7 reproduced to 0.1; vectorised = scalar; FIRMS filtering, de-duplication, aggregation |
 | `.github/workflows/pipeline.yml` | tests, then one hotspot job and one FWI job per year |
 

@@ -1,30 +1,26 @@
 name: FDRS fit
 
-# Joins the hotspot counts and FWI indices of one "FDRS data pipeline" run and fits the logistic regressions.
-# Needs the run id(s) of full (not smoke) data runs whose artifacts (kept 30 days) are still there. The hotspot and FWI
-# artifacts may come from different runs.
+# Joins the hotspot counts and FWI indices of "FDRS data pipeline" runs and fits the logistic regressions.
+# Needs full (not smoke) data runs whose artifacts (kept 30 days) are still there. Years may come from several runs: give
+# every run id, comma separated; a year found in more than one run is read once per run (the files are identical).
 # Run by hand: Actions > FDRS fit > Run workflow.
 
 on:
   workflow_dispatch:
     inputs:
-      hotspots_run_id:
-        description: "Run id of the FDRS data pipeline run that made the hotspot artifacts (the number in its URL)"
+      hotspots_run_ids:
+        description: "Run ids (comma separated) of the data runs that made the hotspot artifacts"
         required: true
-      extra_hotspots_run_id:
-        description: "Optional second run id with more hotspot artifacts (years that had to be re-run)"
-        required: false
-        default: ""
-      fwi_run_id:
-        description: "Run id of the run that made the FWI artifacts (blank = the same run)"
+      fwi_run_ids:
+        description: "Run ids (comma separated) that made the FWI artifacts (blank = the same runs as the hotspots)"
         required: false
         default: ""
       train_years:
-        description: "Training years, comma separated"
+        description: "Years the models are fitted and left-one-out validated on, comma separated"
         required: false
         default: "2019,2020,2021,2022,2023"
       holdout_years:
-        description: "Hold-out years, comma separated"
+        description: "Years only scored with the fit on the training years (blank for none)"
         required: false
         default: "2015"
 
@@ -43,25 +39,20 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: pip install -r requirements.txt
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: hotspots-*
-          path: data/hotspots
-          run-id: ${{ github.event.inputs.hotspots_run_id }}
-          github-token: ${{ github.token }}
-      - uses: actions/download-artifact@v4
-        if: ${{ github.event.inputs.extra_hotspots_run_id != '' }}
-        with:
-          pattern: hotspots-*
-          path: data/hotspots
-          run-id: ${{ github.event.inputs.extra_hotspots_run_id }}
-          github-token: ${{ github.token }}
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: fwi-*
-          path: data/fwi
-          run-id: ${{ github.event.inputs.fwi_run_id || github.event.inputs.hotspots_run_id }}
-          github-token: ${{ github.token }}
+      - name: Download the artifacts of the data runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HOTSPOT_RUNS: ${{ github.event.inputs.hotspots_run_ids }}
+          FWI_RUNS: ${{ github.event.inputs.fwi_run_ids }}
+        run: |
+          fwi_runs="${FWI_RUNS:-$HOTSPOT_RUNS}"
+          for id in $(echo "$HOTSPOT_RUNS" | tr ',' ' '); do
+            gh run download "$id" --repo "$GITHUB_REPOSITORY" --pattern 'hotspots-*' --dir "data/hotspots/run_$id"
+          done
+          for id in $(echo "$fwi_runs" | tr ',' ' '); do
+            gh run download "$id" --repo "$GITHUB_REPOSITORY" --pattern 'fwi-*' --dir "data/fwi/run_$id"
+          done
+          find data -type f | sort | sed 's/^/  /'
       - name: Join into one training table
         run: python scripts/join_training.py --hotspots-dir data/hotspots --fwi-dir data/fwi --out out/training.parquet
       - name: Fit the logistic regressions
@@ -70,7 +61,9 @@ jobs:
           HOLDOUT: ${{ github.event.inputs.holdout_years }}
         run: python scripts/fit_logistic.py --table out/training.parquet --train-years "$TRAIN" --holdout-years "$HOLDOUT" --outdir out/fit
       - name: Show the report
-        run: cat out/fit/report.md >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          cat out/fit/report.md >> "$GITHUB_STEP_SUMMARY"
+          cat out/fit/report.md
       - uses: actions/upload-artifact@v4
         with:
           name: fit-report
