@@ -32,8 +32,11 @@ Locally: `pip install -r requirements.txt`, `python -m pytest tests`, and
 ## Design decisions
 
 * **Response**: binary, at least one unique daytime detection in the cell that day.
-* **Sensors**: all three, de-duplicated at pixel level; the number of sensors active that day is kept as a covariate because
-  more sensors means more overpasses, which raises detection on its own (one sensor 2012-17, two from 2018, three from 2023).
+* **Sensors**: all three are downloaded and de-duplicated at pixel level, and the unique hotspots are then treated as coming
+  from one satellite: the model has no sensor covariate. Per-sensor counts and the per-day "sensor active" table are still
+  written, so a different choice (for example S-NPP only) needs no new download. The cost of this assumption: FIRMS has one
+  sensor before April 2018, two until March 2023 and three after, so detection rises over the years on its own, and the
+  2015 hold-out is the check on how much that matters.
 * **Years**: pilot 2019-2023 (dry 2019 and 2023, wet La Nina 2020-2022); 2015, the extreme haze year, is held out to test the
   model at DC well above 400.
 * **Predictors**: the indices plus a per-region intercept to start; no static covariates yet.
