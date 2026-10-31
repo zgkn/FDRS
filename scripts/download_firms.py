@@ -52,26 +52,72 @@ RETRIES = 6
 
 
 # ------------------------------------------------------------------------------------------------------------- requests
-def get(url, what, session):
-    """GET with retries. The URL holds the key, so errors name `what` and the status only."""
+QUOTA_WINDOW_S = 11 * 60          # FIRMS counts transactions per 10 minutes; wait out a full window at most
+PACE_EVERY = 8                    # ask for the quota state every this many requests
+PACE_ABOVE = 0.7                  # and wait while more than this share of the quota is used
+RESUME_BELOW = 0.4
+
+
+def quota_state(key, session):
+    """(transactions used, limit) of this key in the current window from FIRMS mapkey_status, or None if not readable.
+
+    The state is shared by every job that uses the key, so jobs running in parallel slow each other down.
+    """
+    try:
+        r = session.get(f"{BASE}/mapserver/mapkey_status/?MAP_KEY={key}", timeout=60)
+        d = r.json()
+        return int(d["current_transactions"]), int(d["transaction_limit"])
+    except (requests.RequestException, ValueError, KeyError, TypeError):
+        return None
+
+
+def wait_for_quota(key, session, what, reason):
+    """Sleep until the key's quota window has room again (at most one full window); returns how long it slept."""
+    slept = 0
+    while slept < QUOTA_WINDOW_S:
+        state = quota_state(key, session)
+        if state is not None and state[0] < RESUME_BELOW * state[1]:
+            break
+        print(f"  [wait] {what}: {reason}; quota {'unknown' if state is None else f'{state[0]}/{state[1]}'}, "
+              f"sleeping 60 s ({slept // 60} min so far)", flush=True)
+        time.sleep(60)
+        slept += 60
+        if state is None:                    # cannot tell whether it is the quota: one minute, then let the caller retry
+            break
+    return slept
+
+
+def get(url, what, session, key):
+    """GET with retries. The URL holds the key, so messages name `what` and the status only; the key is never printed.
+
+    HTTP 400/429 are what FIRMS answers when the quota of the key is used up (several jobs share it), so those wait for the
+    quota window to clear before trying again; any other failure backs off briefly.
+    """
     last = None
     for attempt in range(RETRIES):
         try:
             r = session.get(url, timeout=180)
-            if r.status_code == 200:
-                return r.text
-            last = f"HTTP {r.status_code}"
-            if r.status_code in (401, 403):
-                raise SystemExit(f"[X] FIRMS refused the request for {what} ({last}): check FIRMS_MAP_KEY")
         except requests.RequestException as e:
             last = type(e).__name__
-        time.sleep(min(60, 5 * 2 ** attempt))
+            time.sleep(min(60, 5 * 2 ** attempt))
+            continue
+        if r.status_code == 200:
+            return r.text
+        last = f"HTTP {r.status_code}"
+        body = r.text[:160].replace(key, "***").replace("\n", " ")
+        print(f"  [!] {what}: {last} {body!r}", flush=True)
+        if r.status_code in (401, 403):
+            raise SystemExit(f"[X] FIRMS refused the request for {what} ({last}): check FIRMS_MAP_KEY")
+        if r.status_code in (400, 429):
+            wait_for_quota(key, session, what, last)
+        else:
+            time.sleep(min(60, 5 * 2 ** attempt))
     raise RuntimeError(f"{what}: failed after {RETRIES} tries ({last})")
 
 
 def availability(key, session):
     """{source: (first date, last date)} from FIRMS data_availability."""
-    text = get(f"{BASE}/api/data_availability/csv/{key}/ALL", "data_availability", session)
+    text = get(f"{BASE}/api/data_availability/csv/{key}/ALL", "data_availability", session, key)
     out = {}
     for row in csv.DictReader(io.StringIO(text)):
         try:
@@ -105,10 +151,17 @@ def fetch_range(key, source, first, last, session, step_days):
     west, south, east, north = grid.WEST - EDGE, grid.SOUTH - EDGE, grid.EAST + EDGE, grid.NORTH + EDGE
     frames = []
     d = first
+    requests_made = 0
     while d <= last:
         n = min(step_days, (last - d).days + 1)
+        if requests_made % PACE_EVERY == 0:                  # stay clear of the shared quota instead of hitting it
+            state = quota_state(key, session)
+            if state is not None and state[0] > PACE_ABOVE * state[1]:
+                print(f"  [pace] quota {state[0]}/{state[1]} used; waiting for room", flush=True)
+                wait_for_quota(key, session, f"{source} {d}", "pacing")
+        requests_made += 1
         text = get(f"{BASE}/api/area/csv/{key}/{source}/{west},{south},{east},{north}/{n}/{d.isoformat()}",
-                   f"{source} {d}+{n}d", session)
+                   f"{source} {d}+{n}d", session, key)
         head = text.lstrip()[:200].lower()
         if "latitude" in head:
             frames.append(pd.read_csv(io.StringIO(text)))
@@ -198,6 +251,8 @@ def run(first, last, outdir, tag, step_days):
     if not key:
         raise SystemExit("[X] set FIRMS_MAP_KEY (a FIRMS MAP_KEY) in the environment")
     session = requests.Session()
+    state = quota_state(key, session)
+    print(f"FIRMS quota at start: {'not readable' if state is None else f'{state[0]} of {state[1]} transactions used'}", flush=True)
     avail = availability(key, session)
     print("FIRMS data availability for the sources used:", flush=True)
     for _, sp, nrt in SENSORS:

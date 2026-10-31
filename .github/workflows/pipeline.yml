@@ -15,6 +15,14 @@ on:
         description: "Smoke test: only the 10 days 2019-09-01..10 (tick off for the full years)"
         type: boolean
         default: true
+      run_hotspots:
+        description: "Run the FIRMS hotspot jobs"
+        type: boolean
+        default: true
+      run_fwi:
+        description: "Run the ERA5 FWI jobs"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -53,10 +61,12 @@ jobs:
 
   hotspots:
     needs: [test, plan]
+    if: ${{ github.event.inputs.run_hotspots != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 240
     strategy:
       fail-fast: false
+      max-parallel: 2          # all years share the one FIRMS key and its 10-minute transaction quota
       matrix:
         year: ${{ fromJSON(needs.plan.outputs.years) }}
     steps:
@@ -84,6 +94,7 @@ jobs:
 
   fwi:
     needs: [test, plan]
+    if: ${{ github.event.inputs.run_fwi != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:

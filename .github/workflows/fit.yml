@@ -1,15 +1,20 @@
 name: FDRS fit
 
 # Joins the hotspot counts and FWI indices of one "FDRS data pipeline" run and fits the logistic regressions.
-# Needs the run id of a full (not smoke) data run whose artifacts (kept 30 days) are still there.
+# Needs the run id(s) of full (not smoke) data runs whose artifacts (kept 30 days) are still there. The hotspot and FWI
+# artifacts may come from different runs.
 # Run by hand: Actions > FDRS fit > Run workflow.
 
 on:
   workflow_dispatch:
     inputs:
-      run_id:
-        description: "Run id of the FDRS data pipeline run (the number in its URL)"
+      hotspots_run_id:
+        description: "Run id of the FDRS data pipeline run that made the hotspot artifacts (the number in its URL)"
         required: true
+      fwi_run_id:
+        description: "Run id of the run that made the FWI artifacts (blank = the same run)"
+        required: false
+        default: ""
       train_years:
         description: "Training years, comma separated"
         required: false
@@ -38,13 +43,13 @@ jobs:
         with:
           pattern: hotspots-*
           path: data/hotspots
-          run-id: ${{ github.event.inputs.run_id }}
+          run-id: ${{ github.event.inputs.hotspots_run_id }}
           github-token: ${{ github.token }}
       - uses: actions/download-artifact@v4
         with:
           pattern: fwi-*
           path: data/fwi
-          run-id: ${{ github.event.inputs.run_id }}
+          run-id: ${{ github.event.inputs.fwi_run_id || github.event.inputs.hotspots_run_id }}
           github-token: ${{ github.token }}
       - name: Join into one training table
         run: python scripts/join_training.py --hotspots-dir data/hotspots --fwi-dir data/fwi --out out/training.parquet

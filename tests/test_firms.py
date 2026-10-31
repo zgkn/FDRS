@@ -75,3 +75,73 @@ def test_grid_cells():
     assert list(r) == [0, 76, 30, -1] and list(c) == [0, 104, 30, -1]
     assert grid.lat_axis()[0] == 8.0 and grid.lat_axis()[-1] == -11.0 and len(grid.lon_axis()) == 105
     assert list(np.unique(grid.noon_utc_hour(grid.lon_axis()))) == [4, 5, 6]
+
+
+# ---------------------------------------------------------------------------------------------- quota handling (fake FIRMS)
+class FakeResponse:
+    def __init__(self, status, text="", payload=None):
+        self.status_code, self.text, self._payload = status, text, payload
+
+    def json(self):
+        if self._payload is None:
+            raise ValueError("no json")
+        return self._payload
+
+
+class FakeSession:
+    """Answers area requests from `area` (a list) and the quota state from `quota` (a list, last one repeats)."""
+
+    def __init__(self, area, quota):
+        self.area, self.quota, self.calls = list(area), list(quota), 0
+
+    def get(self, url, timeout=0):
+        if "mapkey_status" in url:
+            q = self.quota.pop(0) if len(self.quota) > 1 else self.quota[0]
+            return FakeResponse(200, payload=None if q is None else {"current_transactions": q[0], "transaction_limit": q[1]})
+        self.calls += 1
+        return self.area.pop(0)
+
+
+def no_sleep(monkeypatch):
+    slept = []
+    monkeypatch.setattr(fb.time, "sleep", lambda s: slept.append(s))
+    return slept
+
+
+def test_get_waits_out_the_quota_then_succeeds(monkeypatch, capsys):
+    slept = no_sleep(monkeypatch)
+    s = FakeSession([FakeResponse(400, "Exceeding transaction limit KEY123"), FakeResponse(200, "latitude\n1")],
+                    quota=[(4900, 5000), (4900, 5000), (100, 5000)])
+    assert fb.get("https://x/KEY123/area", "snpp 2019-02-15+5d", s, "KEY123") == "latitude\n1"
+    assert sum(slept) >= 60                                    # it waited at least one minute for the window
+    out = capsys.readouterr().out
+    assert "KEY123" not in out and "***" in out                # the key is never printed
+
+
+def test_get_a_real_400_fails_fast_when_the_quota_is_free(monkeypatch):
+    slept = no_sleep(monkeypatch)
+    s = FakeSession([FakeResponse(400, "Invalid date")] * fb.RETRIES, quota=[(10, 5000)])
+    try:
+        fb.get("https://x/KEY/area", "x", s, "KEY")
+        raise AssertionError("should have raised")
+    except RuntimeError as e:
+        assert "HTTP 400" in str(e) and "KEY" not in str(e)
+    assert sum(slept) == 0                                     # no minutes lost on something waiting cannot fix
+
+
+def test_get_auth_refusal_stops_at_once(monkeypatch):
+    no_sleep(monkeypatch)
+    s = FakeSession([FakeResponse(403, "forbidden")], quota=[(0, 5000)])
+    try:
+        fb.get("https://x/KEY/area", "x", s, "KEY")
+        raise AssertionError("should have raised")
+    except SystemExit as e:
+        assert "FIRMS_MAP_KEY" in str(e)
+    assert s.calls == 1
+
+
+def test_unreadable_quota_waits_only_a_minute(monkeypatch):
+    slept = no_sleep(monkeypatch)
+    s = FakeSession([FakeResponse(400, "?"), FakeResponse(200, "latitude\n")], quota=[None])
+    assert fb.get("https://x/KEY/area", "x", s, "KEY").startswith("latitude")
+    assert sum(slept) == 60
