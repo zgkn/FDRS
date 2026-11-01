@@ -12,3 +12,4 @@ statsmodels
 scikit-learn
 tabulate
 pytest
+matplotlib
