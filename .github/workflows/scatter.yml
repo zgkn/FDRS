@@ -1,0 +1,62 @@
+name: FDRS FWI scatter
+
+# Calculates the final Fire Weather Index (FWI) from ISI and BUI for every land cell and day, and plots it against the number of
+# hotspots detected. Needs full data runs whose artifacts (kept 30 days) are still there (see "FDRS fit" for the run ids).
+# The picture and the small tables are also pushed to the `results` branch (replaced each run); the big files stay in the artifact.
+
+on:
+  workflow_dispatch:
+    inputs:
+      hotspots_run_ids:
+        description: "Run ids (comma separated) of the data runs that made the hotspot artifacts"
+        required: true
+      fwi_run_ids:
+        description: "Run ids (comma separated) that made the FWI artifacts (blank = the same runs as the hotspots)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  scatter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Download the artifacts of the data runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HOTSPOT_RUNS: ${{ github.event.inputs.hotspots_run_ids }}
+          FWI_RUNS: ${{ github.event.inputs.fwi_run_ids }}
+        run: |
+          fwi_runs="${FWI_RUNS:-$HOTSPOT_RUNS}"
+          for id in $(echo "$HOTSPOT_RUNS" | tr ',' ' '); do
+            gh run download "$id" --repo "$GITHUB_REPOSITORY" --pattern 'hotspots-*' --dir "data/hotspots/run_$id"
+          done
+          for id in $(echo "$fwi_runs" | tr ',' ' '); do
+            gh run download "$id" --repo "$GITHUB_REPOSITORY" --pattern 'fwi-*' --dir "data/fwi/run_$id"
+          done
+      - name: Join (this also calculates the FWI)
+        run: python scripts/join_training.py --hotspots-dir data/hotspots --fwi-dir data/fwi --out out/training.parquet
+      - name: FWI vs hotspots
+        run: python scripts/plot_fwi_scatter.py --table out/training.parquet --outdir out/scatter
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fwi-scatter
+          path: out/scatter/
+          retention-days: 30
+      - name: Publish the picture and small tables to the results branch
+        run: |
+          mkdir pub && cp out/scatter/fwi_scatter.png out/scatter/fwi_binned.csv out/scatter/fwi_daily.csv out/scatter/summary.txt pub/
+          cd pub
+          git init -q && git checkout -q -b results
+          git config user.name "github-actions[bot]" && git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A && git commit -q -m "FWI vs hotspots results"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" results

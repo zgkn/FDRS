@@ -4,7 +4,7 @@
 Reads  <hotspots-dir>/**/hotspots_cells_<year>.csv.gz   (from download_firms.py)
        <fwi-dir>/**/fwi_<year>.nc                       (from era5_fwi.py)
 Writes <out> (parquet): date, year, row, col, lat, lon, region, y (a unique daytime hotspot was seen in the cell that day),
-       n_unique, and the day's ffmc, dmc, dc, isi, bui, wind, rain24, rh, temp.
+       n_unique, and the day's ffmc, dmc, dc, isi, bui, fwi (the final Fire Weather Index, from ISI and BUI), wind, rain24, rh, temp.
 
 Land cells are those with ERA5 land-sea mask >= --land-threshold (default 0.5). Hotspots in other (coastal or sea) cells are
 not in the table; how many that is, is printed.
@@ -22,6 +22,7 @@ import pandas as pd
 import xarray as xr
 from scipy import ndimage
 
+import fwi as fwi_system
 import grid
 
 SMALL_ISLAND_CELLS = 40            # smaller islands are lumped into "Other"
@@ -105,6 +106,7 @@ def main():
         df["y"] = (df["n_unique"] > 0).astype("int8")
         for v in ("ffmc", "dmc", "dc", "isi", "bui", "wind", "rain24", "rh", "temp"):
             df[v] = ds[v].values[t_idx, r_idx, c_idx]
+        df["fwi"] = fwi_system.fwi(df["isi"].values, df["bui"].values).astype("float32")     # final FWI from ISI and BUI
         frames.append(df)
         ds.close()
 
