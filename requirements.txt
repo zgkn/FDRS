@@ -13,3 +13,4 @@ scikit-learn
 tabulate
 pytest
 matplotlib
+shapely

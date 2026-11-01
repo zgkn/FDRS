@@ -56,7 +56,7 @@ def design(df, feats, regions, cols):
     for c in cols:
         parts.append(feats[c].values.reshape(-1, 1).astype("float64"))
         names.append(c)
-    region = df["region"].astype(str).values
+    region = df["region_model"].astype(str).values
     for r in regions[1:]:                               # the first (largest) island is the reference
         parts.append((region == r).astype("float64").reshape(-1, 1))
         names.append(f"island_{r}")
@@ -149,12 +149,12 @@ def main():
     train_years = [int(y) for y in a.train_years.split(",") if y]
     hold_years = [int(y) for y in a.holdout_years.split(",") if y]
 
-    df = pd.read_parquet(a.table, columns=["date", "year", "region", "y", "ffmc", "dmc", "dc", "wind"])
+    df = pd.read_parquet(a.table, columns=["date", "year", "region_model", "y", "ffmc", "dmc", "dc", "wind"])
     missing = sorted(set(train_years + hold_years) - set(df["year"].unique()))
     if missing:
         raise SystemExit(f"[X] years not in the table: {missing}")
     df = df[df["year"].isin(train_years + hold_years)].reset_index(drop=True)
-    regions = sorted(df["region"].astype(str).unique(), key=lambda r: -(df["region"].astype(str) == r).sum())
+    regions = sorted(df["region_model"].astype(str).unique(), key=lambda r: -(df["region_model"].astype(str) == r).sum())
     print(f"{len(df)} cell-days; islands: {regions}; peak memory {peak_gb():.1f} GB", flush=True)
     feats = features(df)
     y_all = df["y"].values.astype("float64")
