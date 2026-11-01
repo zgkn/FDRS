@@ -1,0 +1,12 @@
+cells 1886; with a fire 1822; Spearman rho 0.321 (cells with fire), 0.370 (all)
+mean FWI of cells: median 1.16, range 0.13-12.72
+total hotspots per cell (cells with fire): median 494, max 9337
+by island (cells, median mean FWI, median total hotspots, rho):
+  Brunei: 7, 0.51, 102, -0.04
+  Java: 167, 4.53, 413, 0.52
+  Kalimantan: 636, 0.97, 888, 0.56
+  Peninsular Malaysia: 165, 2.06, 215, 0.23
+  Sabah: 88, 0.87, 251, 0.47
+  Sarawak: 156, 0.39, 208, 0.48
+  Singapore: 1, 1.29, 71, nan
+  Sumatra: 602, 1.35, 602, 0.44
