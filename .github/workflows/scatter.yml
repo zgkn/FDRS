@@ -47,6 +47,8 @@ jobs:
         run: python scripts/join_training.py --hotspots-dir data/hotspots --fwi-dir data/fwi --out out/training.parquet
       - name: FWI vs hotspots
         run: python scripts/plot_fwi_scatter.py --table out/training.parquet --outdir out/scatter
+      - name: FWI vs hotspots, one dot per grid cell
+        run: python scripts/plot_fwi_percell.py --table out/training.parquet --outdir out/scatter
       - uses: actions/upload-artifact@v4
         with:
           name: fwi-scatter
@@ -54,7 +56,7 @@ jobs:
           retention-days: 30
       - name: Publish the picture and small tables to the results branch
         run: |
-          mkdir pub && cp out/scatter/fwi_scatter.png out/scatter/fwi_binned.csv out/scatter/fwi_daily.csv out/scatter/summary.txt pub/
+          mkdir pub && cp out/scatter/fwi_scatter.png out/scatter/fwi_binned.csv out/scatter/fwi_daily.csv out/scatter/summary.txt out/scatter/fwi_percell.png out/scatter/fwi_percell.csv out/scatter/percell_summary.txt pub/
           cd pub
           git init -q && git checkout -q -b results
           git config user.name "github-actions[bot]" && git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
