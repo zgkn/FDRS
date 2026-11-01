@@ -1,6 +1,6 @@
 # FDRS: fire risk for southern ASEAN from fire-weather indices and hotspots
 
-Fire danger for Sumatra, peninsular Malaysia, Singapore, Borneo, Java and Brunei (94-120E, 11S-8N), built in the way of the
+Fire danger for Peninsular Malaysia, Sabah, Sarawak, Brunei, Singapore, Sumatra, Kalimantan and Java (1,886 land squares of 0.25 degrees inside 94-120E, 11S-8N), built in the way of the
 Indonesian and Malaysian Fire Danger Rating Systems (de Groot et al. 2006, 2005) but calibrated by regression:
 
 1. compute the Canadian FWI-System codes **FFMC, DMC, DC** and the indices **ISI, BUI** (not the final FWI) from ERA5;
@@ -18,6 +18,7 @@ data run; they were tested on synthetic hotspots only, so treat the first real f
 | `scripts/era5_fwi.py` | hourly ARCO-ERA5 -> noon T, RH, wind and 24 h rain -> daily FFMC, DMC, DC, ISI, BUI per cell. Solar-noon hour per column; 184-day spin-up. |
 | `scripts/download_firms.py` | FIRMS area API -> daytime, nominal/high-confidence vegetation-fire pixels -> de-duplicated across the three sensors (500 m, NOAA-21 > NOAA-20 > S-NPP) -> counts per cell-day, and a per-day table of which sensors were active. |
 | `scripts/grid.py` | the box and the ERA5 0.25 degree grid both are put on |
+| `scripts/study_area.py`, `data/study_boundaries.geojson` | which squares belong to which of the eight places (Natural Earth state and province boundaries); `scripts/make_study_boundaries.py` rebuilds the file. Brunei and Singapore share their neighbour's regression term |
 | `scripts/join_training.py` | hotspot counts + FWI indices -> one row per land cell and day; islands from the land mask give the regions |
 | `scripts/fit_logistic.py` | logistic regressions (island intercept only, then + fine-fuel moisture and wind, + DC, + DMC) with a small Newton solver (checked against statsmodels; statsmodels itself ran the runner out of memory on 4.5 million rows); leave-one-year-out and hold-out AUC, Brier, calibration; date-clustered standard errors |
 | `.github/workflows/fit.yml` | *FDRS fit*: give it the run ids (comma separated) of the full data runs; years may come from several runs |
@@ -43,7 +44,7 @@ Locally: `pip install -r requirements.txt`, `python -m pytest tests`, and
   2015 hold-out is the check on how much that matters.
 * **Years**: pilot 2019-2023 (dry 2019 and 2023, wet La Nina 2020-2022); 2015, the extreme haze year, is held out to test the
   model at DC well above 400.
-* **Predictors**: the indices plus a per-region intercept to start; no static covariates yet.
+* **Predictors**: the indices plus a per-place intercept to start (Kalimantan is the reference); no static covariates yet.
 
 ## FIRMS quota
 
